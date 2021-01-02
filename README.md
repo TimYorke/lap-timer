@@ -1,5 +1,5 @@
-# About
-A 6-axis/GPS based lap timer.
+# About the project
+This is the code for 6-axis/GPS based lap timer running on Linux.
 
 The initial prototype is being developed using Rust on a Raspberry Pi 4, running Ubuntu-MATE desktop.
 Then it will be ported to a compact linux SBC running a custom Linux build.
