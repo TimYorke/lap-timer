@@ -4,17 +4,11 @@
 		{
 			"type": "cargo",
 			"command": "run",
+			
 			"problemMatcher": [
 				"$rustc"
 			],
 			"label": "rust: cargo run"
 		},
-		{
-			"type": "shell",
-			"command": "sudo ./target/debug/lap-timer",
-			"label": "execute laptimer",
-			"dependsOn": "rust: cargo build",
-			"problemMatcher": []
-		}
 	]
 }
