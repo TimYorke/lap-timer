@@ -7,7 +7,10 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-rppal = "*"
+rppal = { version = "*", features = ["hal"] }
 embedded-hal = "*"
 embedded-time = "*"
+display-interface-spi = "*"
+st7789 = "*"
+embedded-graphics = "*"
 drogue-mpu-6050 = "*"
