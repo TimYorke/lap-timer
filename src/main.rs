@@ -42,20 +42,28 @@ fn run() -> Result<(), Box<dyn Error>> {
     display.set_orientation(st7789::Orientation::Landscape).unwrap();
     display.clear(Rgb565::BLACK).unwrap();
 
-    
-    let mut sp = serial::open("/dev/ttyS0").unwrap();
-    println!("Opened serial port");
-    sp.configure(&UART_CONFIG).unwrap();
-    let br = BufReader::new(sp);
-    for line in br.lines() {
-        match line {
-            Ok(line) => process_line(&line, &mut display),
-            Err(e) if e.kind() == std::io::ErrorKind::TimedOut => {},
-            Err(e) => println!("{:?}", e)
-        }
-    }
-    
-    Ok(())
+
+    let mut counter: u64 = 0;
+    // let base_rectangle = Rectangle::new(Point::new(0,0), Point::new(240,240));
+    loop {
+        let colour = match counter % 5 {
+            0 => Rgb565::BLACK,
+            1 => Rgb565::MAGENTA,
+            2 => Rgb565::BLUE,
+            3 => Rgb565::CYAN,
+            4 => Rgb565::WHITE,
+            _ => Rgb565::RED,
+        };
+        
+        display.clear(colour).unwrap();
+        // base_rectangle
+        //     .into_styled(PrimitiveStyle::with_fill(colour))
+        //     .draw(&mut display).unwrap();
+        
+        counter += 1;
+        delay.delay_ms(1u32);
+    } 
+
     
     // Draw the graphics
     // let c = Circle::new(Point::new(60, 60), 14).into_styled(PrimitiveStyle::with_fill(Rgb565::RED));
@@ -77,70 +85,7 @@ fn run() -> Result<(), Box<dyn Error>> {
     //     t.draw(&mut display).unwrap();
     // }
 }
-fn process_line<D: DrawTarget<Rgb565>>(line: &str, display: &mut D) 
-where
-     D::Error : std::fmt::Debug
-{
-    match nmea::parse(line.as_bytes()) {
-        Ok(r) => match r {
-            nmea::ParseResult::GLL(data) => println!("{:?}", data),
-            nmea::ParseResult::RMC(data) => {
-                println!("{:?}", data);
-                update_displayed_time(display, data.fix_time);
-            },
-            nmea::ParseResult::GGA(data) => {
-                println!("{:?}", data);
-                update_displayed_time(display, data.fix_time);
-                update_displayed_satellite_count(display, data.fix_satellites);
-            }
-            nmea::ParseResult::GSV(data) => println!("{}/{}   {:?}", data.sentence_num, data.number_of_sentences, data.sats_info),
-            nmea::ParseResult::GSA(data) => println!("{:?}", data),
-            nmea::ParseResult::VTG(data) => println!("{:?}", data),
-            nmea::ParseResult::TXT(data) => println!("{:?}", data),
-            nmea::ParseResult::Unsupported(_) => println!("Unsupported sentence: {}", line),
-            
-        } 
-        Err(e) => println!("Couldn't parse this nmea sentence \"{}\"\t Reason: \t\"{}\"", line, e)
-    }
-}
 
-fn draw_text_at<D: DrawTarget<C>, F: Font + Copy, C: PixelColor>(display: &mut D, text: &str, location: Point, font: F, colour: C) 
-where
-     D::Error : std::fmt::Debug
-{
-    let t = Text::new(text, location)
-         .into_styled(TextStyle::new(font, colour));
-    t.draw(display).unwrap();
-}
-
-fn update_displayed_time<D: DrawTarget<Rgb565>>(display: &mut D, opt_time: Option<NaiveTime>)
-where
-     D::Error : std::fmt::Debug
-{
-    let location = Point::new(0,0);
-    let blank = Rectangle::new(location, location + Point::new(95,13))
-        .into_styled(PrimitiveStyle::with_fill(Rgb565::BLACK));
-    blank.draw(display).unwrap();
-    if let Some(time) = opt_time { 
-        draw_text_at(display, time.to_string().as_str(), location, Font12x16, Rgb565::new(8, 16, 8));
-    }
-}
-
-fn update_displayed_satellite_count<D: DrawTarget<Rgb565>>(display: &mut D, opt_sat_count: Option<u32>) 
-where
-     D::Error : std::fmt::Debug
-{
-    let location = Point::new(10,26);
-    let blank = Rectangle::new(location, location + Point::new(40,26))
-        .into_styled(PrimitiveStyle::with_fill(Rgb565::BLACK));
-    blank.draw(display).unwrap_or_default();
-    if let Some(sat_count) = opt_sat_count { 
-        let colour = match sat_count {
-            _ => Rgb565::new(255,0, 0)
-        };
-        draw_text_at(display, sat_count.to_string().as_str(), location, Font24x32, colour);
-    }
-}
 
 
 fn main() {
