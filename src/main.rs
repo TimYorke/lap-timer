@@ -7,7 +7,7 @@ use embedded_graphics::{
     style::{PrimitiveStyle, TextStyle},
     *,
 };
-use fonts::{Font12x16, Font6x12, Font6x8};
+use fonts::{Font12x16, Font6x8};
 use primitives::Rectangle;
 use rppal::{
     gpio::Gpio,
@@ -21,6 +21,8 @@ use std::{
     io::{BufRead, BufReader},
 };
 
+
+const SHOULD_PRINT_NMEA_TO_STDOUT: bool = false;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct GpsData {
@@ -61,6 +63,65 @@ pub trait DisplaysGpsData {
     fn update_gps_data(&mut self, data: &GpsData);
 }
 
+
+fn main() {
+    let result = run();
+    // need to do some error handling here
+    match result {
+        Err(e) => println!("FATAL ERROR: {:?}", e),
+        _ => (),
+    }
+}
+
+fn run() -> Result<(), Box<dyn Error>> {
+    // SPI driver init
+    let spi = Spi::new(Bus::Spi0, SlaveSelect::Ss0, 96_000_000, Mode::Mode3).unwrap();
+    let pin_reset = Gpio::new()?.get(27)?.into_output();
+    let pin_dc = Gpio::new()?.get(22)?.into_output();
+    let spi_interface = SPIInterfaceNoCS::new(spi, pin_dc);
+
+    // Display driver init
+    let mut display = ST7789::new(spi_interface, pin_reset, 240, 240);
+    let mut delay = Delay::new();
+    display.init(&mut delay).unwrap();
+    display
+        .set_orientation(st7789::Orientation::Landscape)
+        .unwrap();
+    let mut ui = Ui::new(display);
+
+    let uart_config = serial::PortSettings {
+        baud_rate: serial::Baud9600,
+        char_size: serial::Bits8,
+        flow_control: serial::FlowNone,
+        parity: serial::ParityNone,
+        stop_bits: serial::Stop1,
+    };
+    let mut sp = serial::open("/dev/ttyS0").unwrap();
+    println!("Opened serial port");
+    sp.configure(&uart_config).unwrap();
+
+    let mut gps_data = GpsData::new();
+    let mut br = BufReader::new(sp);
+    discard_line(&mut br); // discarding as it could be a partial line (the GPS is already sending us data at this point)
+    for line in br.lines() {
+        match line {
+            Ok(line) => {
+                process_line(&line, &mut gps_data);
+                ui.update_gps_data(&gps_data);
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::TimedOut => {}
+            Err(e) => println!("{:?}", e),
+        }
+    }
+
+    Ok(())
+}
+
+fn discard_line<R: std::io::Read>(br: &mut BufReader<R>) {
+    let mut buf = String::new();
+    br.read_line(&mut buf).unwrap();
+}
+
 struct Ui<DT>
 where
     DT: DrawTarget<Rgb565>,
@@ -79,6 +140,7 @@ where
             display: display,
             prev_gps_data: GpsData::new(),
         };
+        ui.display.clear(Rgb565::BLACK).unwrap();
         ui.draw_data_labels();
         ui
     }
@@ -129,7 +191,7 @@ where
         blank.draw(&mut self.display).unwrap_or_default();
         if let Some(sat_count) = opt_sat_count {
             let colour = match have_fix {
-                true => Rgb565::new(0, 255, 0),
+                true => Rgb565::new(0, 55, 0),
                 false => LIGHT_GREY,
             };
             self.draw_text_at(
@@ -161,7 +223,7 @@ where
                 latitude.to_string().as_str(),
                 location,
                 FONT_MEDIUM,
-                Rgb565::new(0, 255, 0),
+                Rgb565::new(0, 0, 31),
             );
         }
     }
@@ -176,7 +238,7 @@ where
                 longitude.to_string().as_str(),
                 location,
                 FONT_MEDIUM,
-                Rgb565::new(0, 64, 0),
+                Rgb565::new(0, 0, 31),
             );
         }
     }
@@ -191,7 +253,7 @@ where
                 altitude.to_string().as_str(),
                 location,
                 FONT_MEDIUM,
-                Rgb565::new(0, 16, 0),
+                Rgb565::new(5, 10, 23),
             );
         }
     }
@@ -239,62 +301,18 @@ where
     }
 }
 
-fn run() -> Result<(), Box<dyn Error>> {
-    // SPI driver init
-    let spi = Spi::new(Bus::Spi0, SlaveSelect::Ss0, 96_000_000, Mode::Mode3).unwrap();
-    let pin_reset = Gpio::new()?.get(27)?.into_output();
-    let pin_dc = Gpio::new()?.get(22)?.into_output();
-    let spi_interface = SPIInterfaceNoCS::new(spi, pin_dc);
-
-    // Display driver init
-    let mut display = ST7789::new(spi_interface, pin_reset, 240, 240);
-    let mut delay = Delay::new();
-    display.init(&mut delay).unwrap();
-    display
-        .set_orientation(st7789::Orientation::Landscape)
-        .unwrap();
-    display.clear(Rgb565::BLACK).unwrap();
-    let mut ui = Ui::new(display);
-
-    let uart_config = serial::PortSettings {
-        baud_rate: serial::Baud9600,
-        char_size: serial::Bits8,
-        flow_control: serial::FlowNone,
-        parity: serial::ParityNone,
-        stop_bits: serial::Stop1,
-    };
-    let mut sp = serial::open("/dev/ttyS0").unwrap();
-    println!("Opened serial port");
-    sp.configure(&uart_config).unwrap();
-
-    let mut gps_data = GpsData::new();
-    let br = BufReader::new(sp);
-    for line in br.lines() {
-        match line {
-            Ok(line) => {
-                process_line(&line, &mut gps_data);
-                ui.update_gps_data(&gps_data);
-            }
-            Err(e) if e.kind() == std::io::ErrorKind::TimedOut => {}
-            Err(e) => println!("{:?}", e),
-        }
-    }
-
-    Ok(())
-}
-
 fn process_line(line: &str, gps_info: &mut GpsData) {
     match nmea::parse(line.as_bytes()) {
         Ok(r) => match r {
-            nmea::ParseResult::GLL(data) => println!("{:?}", data),
+            nmea::ParseResult::GLL(data) => if SHOULD_PRINT_NMEA_TO_STDOUT { println!("{:?}", data) },
             nmea::ParseResult::RMC(data) => {
-                println!("{:?}", data);
+                if SHOULD_PRINT_NMEA_TO_STDOUT { println!("{:?}", data); }
                 gps_info.time = data.fix_time;
                 gps_info.latitude = data.lat;
                 gps_info.longitude = data.lon;
             }
             nmea::ParseResult::GGA(data) => {
-                println!("{:?}", data);
+                if SHOULD_PRINT_NMEA_TO_STDOUT { println!("{:?}", data); }
                 gps_info.time = data.fix_time;
                 gps_info.fix_satellites = data.fix_satellites;
                 gps_info.latitude = data.latitude;
@@ -302,32 +320,24 @@ fn process_line(line: &str, gps_info: &mut GpsData) {
                 gps_info.altitude = data.altitude;
                 gps_info.hdop = data.hdop;
             }
-            nmea::ParseResult::GSV(data) => println!(
+            nmea::ParseResult::GSV(data) => if SHOULD_PRINT_NMEA_TO_STDOUT { println!(
                 "{}/{}   {:?}",
                 data.sentence_num, data.number_of_sentences, data.sats_info
-            ),
+            )},
             nmea::ParseResult::GSA(data) => {
-                println!("{:?}", data);
+                if SHOULD_PRINT_NMEA_TO_STDOUT { println!("{:?}", data); }
                 gps_info.pdop = data.pdop;
                 gps_info.hdop = data.hdop;
                 gps_info.vdop = data.vdop;
             }
-            nmea::ParseResult::VTG(data) => println!("{:?}", data),
-            nmea::ParseResult::Unsupported(_) => println!("Unsupported sentence: {}", line),
-            nmea::ParseResult::TXT(data) => println!("{:?}", data),
+            nmea::ParseResult::VTG(data) => if SHOULD_PRINT_NMEA_TO_STDOUT { println!("{:?}", data) },
+            nmea::ParseResult::Unsupported(_) => if SHOULD_PRINT_NMEA_TO_STDOUT { println!("Unsupported sentence: {}", line) },
+            nmea::ParseResult::TXT(data) => if SHOULD_PRINT_NMEA_TO_STDOUT { println!("{:?}", data) },
         },
-        Err(e) => println!(
-            "Couldn't parse this nmea sentence \"{}\"\t Reason: \t\"{}\"",
-            line, e
-        ),
-    }
-}
-
-fn main() {
-    let result = run();
-    // need to do some error handling here
-    match result {
-        Err(e) => println!("FATAL ERROR: {:?}", e),
-        _ => (),
+        Err(e) => {
+            if !e.as_str().eq("Map on Result") {
+                println!( "Couldn't parse this nmea sentence \"{}\"\t Reason: \t\"{}\"", line, e)
+            }
+        }
     }
 }
