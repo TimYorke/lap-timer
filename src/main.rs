@@ -16,10 +16,8 @@ use rppal::{
 };
 use serial::SerialPort;
 use st7789::ST7789;
-use std::{
-    error::Error,
-    io::{BufRead, BufReader},
-};
+use std::{error::Error, io::{BufRead, BufReader, Write}};
+use std::fs::{File};
 
 
 const SHOULD_PRINT_NMEA_TO_STDOUT: bool = false;
@@ -100,6 +98,8 @@ fn run() -> Result<(), Box<dyn Error>> {
     println!("Opened serial port");
     sp.configure(&uart_config).unwrap();
 
+    let mut log_file = File::create("gps_log.txt").unwrap();
+
     let mut gps_data = GpsData::new();
     let mut br = BufReader::new(sp);
     discard_line(&mut br); // discarding as it could be a partial line (the GPS is already sending us data at this point)
@@ -107,6 +107,7 @@ fn run() -> Result<(), Box<dyn Error>> {
         match line {
             Ok(line) => {
                 process_line(&line, &mut gps_data);
+                log(&line, &mut log_file);
                 ui.update_gps_data(&gps_data);
             }
             Err(e) if e.kind() == std::io::ErrorKind::TimedOut => {}
@@ -117,9 +118,14 @@ fn run() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+fn log(line: &str, log_file: &mut File) {
+    log_file.write_all(line.as_bytes()).unwrap();
+    log_file.write_all(b"\n").unwrap();
+}
+
 fn discard_line<R: std::io::Read>(br: &mut BufReader<R>) {
     let mut buf = String::new();
-    br.read_line(&mut buf).unwrap();
+    let _r = br.read_line(&mut buf);
 }
 
 struct Ui<DT>
