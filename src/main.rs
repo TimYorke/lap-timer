@@ -1,4 +1,5 @@
 use display_interface_spi::SPIInterfaceNoCS;
+use embedded_hal::prelude::_embedded_hal_blocking_delay_DelayMs;
 use rppal::{gpio::Gpio, hal::Delay, i2c::I2c, spi::{Bus, Mode, SlaveSelect, Spi}};
 use st7789::ST7789;
 use std::error::Error;
@@ -11,6 +12,7 @@ fn main() {
     let mut imu = create_imu(&mut delay);
     loop {
         ui.display_quaternion(imu.quaternion().unwrap());
+        delay.delay_ms(5u32);
     }
 }
 

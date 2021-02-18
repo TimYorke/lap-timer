@@ -3,7 +3,7 @@ use embedded_graphics::{
     fonts::Text,
     pixelcolor::Rgb565,
     style::{PrimitiveStyle, TextStyle},
-    fonts::{Font12x16},
+    fonts::Font12x16,
     primitives::Rectangle,
 };
 use bno055::mint;
@@ -60,14 +60,14 @@ impl Ui {
     pub fn display_quaternion(&mut self, q: mint::Quaternion<f32>) {
         let x = 40;
         let font = FONT_MEDIUM;
-        let colour = LIGHT_GREY;
+        let colour = Rgb565::new(Rgb565::MAX_R/2,Rgb565::MAX_G,Rgb565::MAX_B / 4);
         let location = Point::new(x, 50);
-        let blank = Rectangle::new(location, location + Point::new(170, 80))
+        let blank = Rectangle::new(location, location + Point::new(57, 75))
             .into_styled(PrimitiveStyle::with_fill(Rgb565::BLACK));
         blank.draw(&mut self.display).unwrap();
-        self.draw_text_at(q.v.x.to_string().as_str(), Point::new(x, 50), font, colour);
-        self.draw_text_at(q.v.y.to_string().as_str(), Point::new(x, 70), font, colour);
-        self.draw_text_at(q.v.z.to_string().as_str(), Point::new(x, 90), font, colour);
-        self.draw_text_at(q.s.to_string().as_str(), Point::new(x, 110), font, colour); 
+        self.draw_text_at(format!("{:+.2}",q.v.x).as_str(), Point::new(x, 50), font, colour);
+        self.draw_text_at(format!("{:+.2}",q.v.y).as_str(), Point::new(x, 70), font, colour);
+        self.draw_text_at(format!("{:+.2}",q.v.z).as_str(), Point::new(x, 90), font, colour);
+        self.draw_text_at(format!("{:+.2}",q.s).as_str(), Point::new(x, 110), font, colour); 
     }
 }
