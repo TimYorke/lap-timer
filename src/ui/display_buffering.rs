@@ -1,4 +1,4 @@
-use embedded_graphics::{image::{Image, ImageRaw, ImageRawLE}, pixelcolor::{Rgb565, raw::RawU16}, prelude::*};
+use embedded_graphics::{image::{Image, ImageRaw, ImageRawLE}, pixelcolor::{Rgb565, raw::RawU16}, prelude::*, primitives::Rectangle, primitives::Rectangle};
 
 #[derive(Clone)]
 struct RawBuffer {
@@ -86,36 +86,49 @@ impl DeltaDisplayBuffer {
     }
 
     pub fn draw<D: DrawTarget<Rgb565>>(&mut self, display: &mut D) -> Result<(), D::Error> {
+        if let Some(area) = self.get_area_of_changed_pixels() {
+//            display.draw_iter(item);
+        }
+        Ok(())
+    }
+
+    fn get_pixel_iterator_for_area(&self, area: Rectangle) {
+
+    }
+
+    fn get_area_of_changed_pixels(&self) -> Option<Rectangle> {
+        let mut changed_area: Option<Rectangle> = None;
         match self.last_buffer {
             Some(ref mut last_buffer) => {
-                for row in 0..self.current_buffer.height {
-                    for col in 0..self.current_buffer.width {
-                        let index = col + (row * self.current_buffer.width);
+                for x in 0..self.current_buffer.height as i32 {
+                    for y in 0..self.current_buffer.width as i32 {
+                        let index = x as usize + (y as usize * self.current_buffer.width);
                         if self.current_buffer.buffer[index] != last_buffer.buffer[index] {
-                            display.draw_pixel(Pixel(
-                                Point::new(col as i32, row as i32) + self.position,
-                                Rgb565::from(RawU16::new(self.current_buffer.buffer[index])))
-                            )?;
+                            if let Some(mut ca) = changed_area {
+                                if x < ca.top_left.x {
+                                    ca.top_left.x = x;
+                                } else if x > ca.bottom_right.x {
+                                    ca.bottom_right.x = x;
+                                }
+                                if y < ca.top_left.y {
+                                    ca.top_left.y = y;
+                                } else if y > ca.bottom_right.y {
+                                    ca.bottom_right.y = y;
+                                }
+                            } else {
+                                changed_area = Some(Rectangle::new(Point::new(x, y), Point::new(x, y)));
+                            } 
                             last_buffer.buffer[index] = self.current_buffer.buffer[index];
                         }
                         self.current_buffer.buffer[index] = 0; // this should really be the default background colour
                     }
                 }
-            },
-            None => {
-                self.last_buffer = Some(self.current_buffer.clone());
-                for row in 0..self.current_buffer.height {
-                    for col in 0..self.current_buffer.width {
-                        let index = col + (row * self.current_buffer.width);
-                        display.draw_pixel(Pixel(
-                            Point::new(col as i32, row as i32) + self.position,
-                            Rgb565::from(RawU16::new(self.current_buffer.buffer[index])))
-                        )?;
-                    }
-                }
             }
+            None => changed_area = Some( Rectangle::new(Point::new(0, 0), 
+                Point::new(self.current_buffer.height as i32 - 1, self.current_buffer.width as i32 - 1)))
         }
-        Ok(())
+        // TODO: convert the sub-area defined by top-left and bottom-right into an image and draw
+        changed_area
     }
 }
 
