@@ -1,6 +1,3 @@
-#![feature(const_generics)]
-#![feature(const_evaluatable_checked)]
-
 use display_interface_spi::SPIInterfaceNoCS;
 use embedded_hal::prelude::_embedded_hal_blocking_delay_DelayMs;
 use rppal::{gpio::Gpio, hal::Delay, i2c::I2c, spi::{Bus, Mode, SlaveSelect, Spi}};
