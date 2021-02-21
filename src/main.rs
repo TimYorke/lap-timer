@@ -44,4 +44,3 @@ fn create_ui(delay: &mut Delay) -> Result<ui::Ui, Box<dyn Error>> {
     display.set_orientation(st7789::Orientation::Landscape).unwrap();
     Ok(Ui::new(display))
 }
-
