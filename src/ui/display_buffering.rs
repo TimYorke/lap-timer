@@ -68,6 +68,8 @@ impl Drawable<Rgb565> for DisplayBuffer {
     }
 }
 
+// This was much too slow because it employs single pixel writes to draw each of the changed pixels. This turns out to be around twice as slow for the case of changing text.
+// An alternative would be to figure out the smallest area that covers all the changed pixels and send that down as a block. 
 pub struct DeltaDisplayBuffer {
     last_buffer: Option<RawBuffer>,
     current_buffer: RawBuffer,
