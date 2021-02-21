@@ -1,17 +1,27 @@
+mod ui;
+use ui::*;
+mod fps_monitor;
+use fps_monitor::*;
 use display_interface_spi::SPIInterfaceNoCS;
 use embedded_hal::prelude::_embedded_hal_blocking_delay_DelayMs;
 use rppal::{gpio::Gpio, hal::Delay, i2c::I2c, spi::{Bus, Mode, SlaveSelect, Spi}};
 use st7789::ST7789;
 use std::error::Error;
 
-mod ui;
 
 fn main() {
     let mut delay = Delay::new();
     let mut ui = create_ui(&mut delay).unwrap();
     let mut imu = create_imu(&mut delay);
+    let mut fps_mon = FpsMonitor::start_new(10);
     loop {
         ui.display_quaternion(imu.quaternion().unwrap());
+        
+        fps_mon.on_frame();
+        if let Some(fps) = fps_mon.get_fps() {
+            ui.display_fps(fps);
+        }
+
         delay.delay_ms(5u32);
     }
 }
@@ -32,7 +42,6 @@ fn create_ui(delay: &mut Delay) -> Result<ui::Ui, Box<dyn Error>> {
     let mut display = ST7789::new(spi_interface, pin_reset, 240, 240);
     display.init(delay).unwrap();
     display.set_orientation(st7789::Orientation::Landscape).unwrap();
-    Ok(ui::Ui::new(display))
+    Ok(Ui::new(display))
 }
-
 
