@@ -5,7 +5,7 @@ use display_interface_spi::SPIInterfaceNoCS;
 use rppal::{gpio::OutputPin, spi::Spi};
 
 mod display_buffering;
-use display_buffering::DisplayBuffer;
+use display_buffering::DeltaDisplayBuffer;
 
 const FONT_SMALL : fonts::Font6x8 = fonts::Font6x8;
 const FONT_MEDIUM : Font12x16 = Font12x16;
@@ -15,12 +15,16 @@ const GREY: Rgb565 = Rgb565::new(12, 24, 12);
 
 pub struct Ui {
     display: ST7789<SPIInterfaceNoCS<Spi, OutputPin>, OutputPin>,
+    fps_display_buffer: DeltaDisplayBuffer,
+    readings_display_buffer: DeltaDisplayBuffer,
 }
 
 impl Ui {
     pub fn new(mut display: ST7789<SPIInterfaceNoCS<Spi, OutputPin>, OutputPin>) -> Self {
         display.clear(Rgb565::BLACK).unwrap();
-        let mut ui = Ui{ display };
+        let fps_display_buffer = DeltaDisplayBuffer::new(50, 12, Point::new(190, 0));
+        let readings_display_buffer = DeltaDisplayBuffer::new(75, 75, Point::new(40, 50));
+        let mut ui = Ui{display, fps_display_buffer, readings_display_buffer};
         ui.draw_data_labels();
         ui
     }
@@ -54,21 +58,19 @@ impl Ui {
     }
 
     pub fn display_quaternion(&mut self, q: mint::Quaternion<f32>) {
-        let x = 40;
         let font = FONT_MEDIUM;
         let colour = Rgb565::new(Rgb565::MAX_R/2,Rgb565::MAX_G,Rgb565::MAX_B / 4);
-        //let location = Point::new(x, 50);
-        let mut buffer = DisplayBuffer::new(75, 75, Point::new(40, 50));
-        Ui::draw_text_at(format!("{:+.3}",q.v.x).as_str(), Point::new(0, 0), font, colour,&mut buffer);
-        Ui::draw_text_at(format!("{:+.3}",q.v.y).as_str(), Point::new(0, 20), font, colour, &mut buffer);
-        Ui::draw_text_at(format!("{:+.3}",q.v.z).as_str(), Point::new(0, 40), font, colour, &mut buffer);
-        Ui::draw_text_at(format!("{:+.3}",q.s).as_str(), Point::new(0, 60), font, colour, &mut buffer); 
-        buffer.draw(&mut self.display).unwrap();
+        self.readings_display_buffer.clear(Rgb565::BLACK).unwrap();
+        Ui::draw_text_at(format!("{:+.3}",q.v.x).as_str(), Point::new(0, 0), font, colour,&mut self.readings_display_buffer);
+        Ui::draw_text_at(format!("{:+.3}",q.v.y).as_str(), Point::new(0, 20), font, colour, &mut self.readings_display_buffer);
+        Ui::draw_text_at(format!("{:+.3}",q.v.z).as_str(), Point::new(0, 40), font, colour, &mut self.readings_display_buffer);
+        Ui::draw_text_at(format!("{:+.3}",q.s).as_str(), Point::new(0, 60), font, colour, &mut self.readings_display_buffer); 
+        self.readings_display_buffer.draw(&mut self.display).unwrap();
     }
 
     pub fn display_fps(&mut self, fps: u32) {
-        let mut buffer = DisplayBuffer::new(50, 12, Point::new(190, 0));
-        Ui::draw_text_at(format!("{} fps",fps).as_str(), Point::new(0, 0), FONT_SMALL, GREY,&mut buffer);
-        buffer.draw(&mut self.display).unwrap();
+        self.fps_display_buffer.clear(Rgb565::BLACK).unwrap();
+        Ui::draw_text_at(format!("{} fps",fps).as_str(), Point::new(0, 0), FONT_SMALL, GREY,&mut self.fps_display_buffer);
+        self.fps_display_buffer.draw(&mut self.display).unwrap();
     }
 }

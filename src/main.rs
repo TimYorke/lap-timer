@@ -13,7 +13,7 @@ fn main() {
     let mut delay = Delay::new();
     let mut ui = create_ui(&mut delay).unwrap();
     let mut imu = create_imu(&mut delay);
-    let mut fps_mon = FpsMonitor::start_new(10);
+    let mut fps_mon = FpsMonitor::start_new(200);
     loop {
         ui.display_quaternion(imu.quaternion().unwrap());
         
