@@ -1,6 +1,7 @@
 
 
 use embedded_graphics::{pixelcolor::{Rgb565, raw::RawU16}, prelude::*, primitives::Rectangle};
+use itertools::Itertools;
 
 #[derive(Clone)]
 struct RawBuffer {
@@ -74,6 +75,7 @@ impl Drawable<Rgb565> for DisplayBuffer {
 pub struct DeltaDisplayBuffer {
     last_buffer: Option<RawBuffer>,
     current_buffer: RawBuffer,
+    changed_map: Vec<Point>,
     position: Point,
 }
 
@@ -82,6 +84,7 @@ impl DeltaDisplayBuffer {
         DeltaDisplayBuffer { 
             last_buffer: None, 
             current_buffer: RawBuffer::new(width, height), 
+            changed_map: Vec::new(),
             position 
         }
     }
@@ -89,12 +92,14 @@ impl DeltaDisplayBuffer {
     pub fn draw<D: DrawTarget<Rgb565>>(&mut self, display: &mut D) -> Result<(), D::Error> {
         match self.last_buffer {
             Some(ref lb) => {
-                let pixel_iter = self.current_buffer.buffer.iter().enumerate()
-                .filter(|(index, _)| self.current_buffer.buffer[index.clone()] != lb.buffer[index.clone()]) 
-                .map(|(index, v)| -> Pixel<Rgb565> {
-                    let y = (index / self.current_buffer.width) as i32;
-                    let x = (index % self.current_buffer.width) as i32;
-                    Pixel(Point::new(x, y) + self.position, Rgb565::from(RawU16::new(v.clone())))
+                let pixel_iter = self.changed_map.iter()
+                .map(|p| {
+                    let index = self.current_buffer.width * p.y as usize + p.x as usize;
+                    (p, index)
+                })
+                .filter(|(_, index)| self.current_buffer.buffer[index.clone()] != lb.buffer[index.clone()]) 
+                .map(|(p, index)| -> Pixel<Rgb565> {
+                    Pixel(p.clone(), Rgb565::from(RawU16::new(self.current_buffer.buffer[index])))
                 });
                 display.draw_iter(pixel_iter)?;
             },
@@ -108,6 +113,7 @@ impl DeltaDisplayBuffer {
                 display.draw_iter(pixel_iter)?;
             }
         };
+        self.changed_map.clear();
         self.last_buffer = Some(self.current_buffer.clone());
         Ok(())
     }
@@ -118,7 +124,18 @@ impl DrawTarget<Rgb565> for DeltaDisplayBuffer {
     type Error = u32;
 
     fn draw_pixel(&mut self, item: Pixel<Rgb565>) -> Result<(), Self::Error> {
-        self.current_buffer.draw_pixel(item)
+        let colour : u16 = item.1.into_storage();
+        let index = item.0.y as usize * self.current_buffer.width + item.0.x as usize;
+        if let Some(ref lb) = self.last_buffer {
+            self.current_buffer.buffer[index] = colour;
+            if colour != lb.buffer[index] {
+                self.changed_map.push(item.0); 
+            } else {
+            }
+        } else {
+            self.current_buffer.buffer[index] = colour;
+        }
+        Ok(())
     }
 
     fn size(&self) -> Size {
