@@ -1,4 +1,4 @@
-use embedded_graphics::{*, fonts::Font12x16, fonts::Text, pixelcolor::Rgb565, prelude::*, style::TextStyle};
+use embedded_graphics::{*, fonts::Font12x16, fonts::Text, pixelcolor::Rgb565, prelude::*, primitives::Rectangle, style::{PrimitiveStyle, TextStyle}};
 use bno055::mint;
 use st7789::ST7789;
 use display_interface_spi::SPIInterfaceNoCS;
@@ -15,16 +15,14 @@ const GREY: Rgb565 = Rgb565::new(12, 24, 12);
 
 pub struct Ui {
     display: ST7789<SPIInterfaceNoCS<Spi, OutputPin>, OutputPin>,
-    fps_display_buffer: DeltaDisplayBuffer,
-    readings_display_buffer: DeltaDisplayBuffer,
+    display_buffer: DeltaDisplayBuffer,
 }
 
 impl Ui {
     pub fn new(mut display: ST7789<SPIInterfaceNoCS<Spi, OutputPin>, OutputPin>) -> Self {
         display.clear(Rgb565::BLACK).unwrap();
-        let fps_display_buffer = DeltaDisplayBuffer::new(50, 12, Point::new(190, 0));
-        let readings_display_buffer = DeltaDisplayBuffer::new(75, 75, Point::new(40, 50));
-        let mut ui = Ui{display, fps_display_buffer, readings_display_buffer};
+        let display_buffer = DeltaDisplayBuffer::new(240, 240, Point::new(0, 0));
+        let mut ui = Ui{ display, display_buffer };
         ui.draw_data_labels();
         ui
     }
@@ -53,24 +51,32 @@ impl Ui {
         ];
         let start_y = 50;
         for (index, label) in labels.iter().enumerate() {
-            Ui::draw_text_at(label, Point::new(0, start_y + (index as i32) * 20), font, colour, &mut self.display);
+            Ui::draw_text_at(label, Point::new(0, start_y + (index as i32) * 20), font, colour, &mut self.display_buffer);
         }
     }
 
     pub fn display_quaternion(&mut self, q: mint::Quaternion<f32>) {
+        let x = 40;
         let font = FONT_MEDIUM;
         let colour = Rgb565::new(Rgb565::MAX_R/2,Rgb565::MAX_G,Rgb565::MAX_B / 4);
-        self.readings_display_buffer.clear(Rgb565::BLACK).unwrap();
-        Ui::draw_text_at(format!("{:+.3}",q.v.x).as_str(), Point::new(0, 0), font, colour,&mut self.readings_display_buffer);
-        Ui::draw_text_at(format!("{:+.3}",q.v.y).as_str(), Point::new(0, 20), font, colour, &mut self.readings_display_buffer);
-        Ui::draw_text_at(format!("{:+.3}",q.v.z).as_str(), Point::new(0, 40), font, colour, &mut self.readings_display_buffer);
-        Ui::draw_text_at(format!("{:+.3}",q.s).as_str(), Point::new(0, 60), font, colour, &mut self.readings_display_buffer); 
-        self.readings_display_buffer.draw(&mut self.display).unwrap();
+        let location = Point::new(x, 50);
+        let blank = Rectangle::new(location, location + Point::new(75, 75))
+            .into_styled(PrimitiveStyle::with_fill(Rgb565::BLACK));
+        blank.draw(&mut self.display_buffer).unwrap();
+        Ui::draw_text_at(format!("{:+.3}",q.v.x).as_str(), Point::new(x, 50), font, colour,&mut self.display_buffer);
+        Ui::draw_text_at(format!("{:+.3}",q.v.y).as_str(), Point::new(x, 70), font, colour, &mut self.display_buffer);
+        Ui::draw_text_at(format!("{:+.3}",q.v.z).as_str(), Point::new(x, 90), font, colour, &mut self.display_buffer);
+        Ui::draw_text_at(format!("{:+.3}",q.s).as_str(), Point::new(x, 110), font, colour, &mut self.display_buffer); 
+        // TODO: Remove the clone below:
+        self.display_buffer.draw(&mut self.display).unwrap();
     }
 
     pub fn display_fps(&mut self, fps: u32) {
-        self.fps_display_buffer.clear(Rgb565::BLACK).unwrap();
-        Ui::draw_text_at(format!("{} fps",fps).as_str(), Point::new(0, 0), FONT_SMALL, GREY,&mut self.fps_display_buffer);
-        self.fps_display_buffer.draw(&mut self.display).unwrap();
+        let location = Point::new(190, 0);
+        let blank = Rectangle::new(location, location + Point::new(50, 12))
+            .into_styled(PrimitiveStyle::with_fill(Rgb565::BLACK));
+        blank.draw(&mut self.display_buffer).unwrap();
+        Ui::draw_text_at(format!("{} fps",fps).as_str(), Point::new(190, 0), FONT_SMALL, GREY,&mut self.display_buffer);
+        self.display_buffer.draw(&mut self.display).unwrap();
     }
 }
