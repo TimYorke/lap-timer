@@ -26,6 +26,9 @@ impl Ui {
         ui.draw_data_labels();
         ui
     }
+    pub fn flush(&mut self) {
+        self.display_buffer.draw(&mut self.display).unwrap();
+    }
     
     fn draw_text_at<F: Font + Copy, D: DrawTarget<Rgb565>>(
         text: &str,
@@ -55,7 +58,7 @@ impl Ui {
         }
     }
 
-    pub fn display_quaternion(&mut self, q: mint::Quaternion<f32>) {
+    pub fn draw_quaternion(&mut self, q: mint::Quaternion<f32>) {
         let x = 40;
         let font = FONT_MEDIUM;
         let colour = Rgb565::new(Rgb565::MAX_R/2,Rgb565::MAX_G,Rgb565::MAX_B / 4);
@@ -67,16 +70,13 @@ impl Ui {
         Ui::draw_text_at(format!("{:+.3}",q.v.y).as_str(), Point::new(x, 70), font, colour, &mut self.display_buffer);
         Ui::draw_text_at(format!("{:+.3}",q.v.z).as_str(), Point::new(x, 90), font, colour, &mut self.display_buffer);
         Ui::draw_text_at(format!("{:+.3}",q.s).as_str(), Point::new(x, 110), font, colour, &mut self.display_buffer); 
-        // TODO: Remove the clone below:
-        self.display_buffer.draw(&mut self.display).unwrap();
     }
 
-    pub fn display_fps(&mut self, fps: u32) {
+    pub fn draw_fps(&mut self, fps: u32) {
         let location = Point::new(190, 0);
         let blank = Rectangle::new(location, location + Point::new(50, 12))
             .into_styled(PrimitiveStyle::with_fill(Rgb565::BLACK));
         blank.draw(&mut self.display_buffer).unwrap();
         Ui::draw_text_at(format!("{} fps",fps).as_str(), Point::new(190, 0), FONT_SMALL, GREY,&mut self.display_buffer);
-        self.display_buffer.draw(&mut self.display).unwrap();
     }
 }

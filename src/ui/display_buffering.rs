@@ -1,7 +1,8 @@
 
 
 use embedded_graphics::{pixelcolor::{Rgb565, raw::RawU16}, prelude::*, primitives::Rectangle};
-use itertools::Itertools;
+
+const MAX_DIRTY_PIXEL_MAP_SIZE: usize = 10000;
 
 #[derive(Clone)]
 struct RawBuffer {
@@ -33,49 +34,10 @@ impl DrawTarget<Rgb565> for RawBuffer {
     }
 }
 
-pub struct DisplayBuffer {
-    buffer: RawBuffer,
-    position: Point,
-}
-
-impl DisplayBuffer {
-    pub fn new(width: usize, height: usize, position: Point) -> Self {
-        let buffer = RawBuffer::new(width, height);
-        DisplayBuffer { buffer, position }
-    }
-}
-
-impl DrawTarget<Rgb565> for DisplayBuffer {
-    type Error = u32;
-
-    fn draw_pixel(&mut self, item: Pixel<Rgb565>) -> Result<(), Self::Error> {
-        self.buffer.draw_pixel(item)
-    }
-
-    fn size(&self) -> Size {
-        self.buffer.size()
-    }
-}
-
-impl Drawable<Rgb565> for DisplayBuffer {
-    fn draw<D: DrawTarget<Rgb565>>(self, display: &mut D) -> Result<(), D::Error> {
-        let pixel_iter = self.buffer.buffer.iter().enumerate()
-            .map(|(index, v)| -> Pixel<Rgb565> {
-                let y = (index / self.buffer.width) as i32;
-                let x = (index % self.buffer.width) as i32;
-                Pixel(Point::new(x, y) + self.position, Rgb565::from(RawU16::new(v.clone())))
-            });
-        display.draw_iter(pixel_iter)?;
-        Ok(()) 
-    }
-}
-
-// This was much too slow because it employs single pixel writes to draw each of the changed pixels. This turns out to be around twice as slow for the case of changing text.
-// An alternative would be to figure out the smallest area that covers all the changed pixels and send that down as a block. 
 pub struct DeltaDisplayBuffer {
     last_buffer: Option<RawBuffer>,
     current_buffer: RawBuffer,
-    changed_map: Vec<Point>,
+    dirty_pixel_map: Vec<Point>,
     position: Point,
 }
 
@@ -84,7 +46,7 @@ impl DeltaDisplayBuffer {
         DeltaDisplayBuffer { 
             last_buffer: None, 
             current_buffer: RawBuffer::new(width, height), 
-            changed_map: Vec::new(),
+            dirty_pixel_map: Vec::with_capacity(MAX_DIRTY_PIXEL_MAP_SIZE),
             position 
         }
     }
@@ -92,16 +54,26 @@ impl DeltaDisplayBuffer {
     pub fn draw<D: DrawTarget<Rgb565>>(&mut self, display: &mut D) -> Result<(), D::Error> {
         match self.last_buffer {
             Some(ref lb) => {
-                let pixel_iter = self.changed_map.iter()
-                .map(|p| {
-                    let index = self.current_buffer.width * p.y as usize + p.x as usize;
-                    (p, index)
-                })
-                .filter(|(_, index)| self.current_buffer.buffer[index.clone()] != lb.buffer[index.clone()]) 
-                .map(|(p, index)| -> Pixel<Rgb565> {
-                    Pixel(p.clone(), Rgb565::from(RawU16::new(self.current_buffer.buffer[index])))
-                });
-                display.draw_iter(pixel_iter)?;
+                if self.dirty_pixel_map.len() < MAX_DIRTY_PIXEL_MAP_SIZE {
+                    let pixel_iter = self.dirty_pixel_map.iter()
+                    .map(|p| {
+                        let index = self.current_buffer.width * p.y as usize + p.x as usize;
+                        (p, index)
+                    })
+                    .filter(|(_, index)| self.current_buffer.buffer[index.clone()] != lb.buffer[index.clone()]) 
+                    .map(|(p, index)| -> Pixel<Rgb565> {
+                        Pixel(p.clone(), Rgb565::from(RawU16::new(self.current_buffer.buffer[index])))
+                    });
+                    display.draw_iter(pixel_iter)?;
+                } else {
+                    let pixel_iter = self.current_buffer.buffer.iter().enumerate()
+                    .filter(|(index, v)| v.clone().clone() != lb.buffer[index.clone()])
+                    .map(|(index, v)| -> Pixel<Rgb565> {
+                        let p = Point::new( (index % self.current_buffer.width) as i32, (index / self.current_buffer.width) as i32);
+                        Pixel(p, Rgb565::from(RawU16::new(v.clone())))
+                    });
+                    display.draw_iter(pixel_iter)?;
+                }
             },
             None => {
                 let pixel_iter = self.current_buffer.buffer.iter().enumerate()
@@ -113,7 +85,7 @@ impl DeltaDisplayBuffer {
                 display.draw_iter(pixel_iter)?;
             }
         };
-        self.changed_map.clear();
+        self.dirty_pixel_map.clear();
         self.last_buffer = Some(self.current_buffer.clone());
         Ok(())
     }
@@ -124,16 +96,17 @@ impl DrawTarget<Rgb565> for DeltaDisplayBuffer {
     type Error = u32;
 
     fn draw_pixel(&mut self, item: Pixel<Rgb565>) -> Result<(), Self::Error> {
-        let colour : u16 = item.1.into_storage();
+        let new_colour : u16 = item.1.into_storage();
         let index = item.0.y as usize * self.current_buffer.width + item.0.x as usize;
         if let Some(ref lb) = self.last_buffer {
-            self.current_buffer.buffer[index] = colour;
-            if colour != lb.buffer[index] {
-                self.changed_map.push(item.0); 
+            self.current_buffer.buffer[index] = new_colour;
+            let last_colour = lb.buffer[index];
+            if new_colour != last_colour && self.dirty_pixel_map.len() < MAX_DIRTY_PIXEL_MAP_SIZE {
+                self.dirty_pixel_map.push(item.0); 
             } else {
             }
         } else {
-            self.current_buffer.buffer[index] = colour;
+            self.current_buffer.buffer[index] = new_colour;
         }
         Ok(())
     }

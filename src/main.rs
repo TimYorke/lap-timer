@@ -13,15 +13,20 @@ fn main() {
     let mut delay = Delay::new();
     let mut ui = create_ui(&mut delay).unwrap();
     let mut imu = create_imu(&mut delay);
-    let mut fps_mon = FpsMonitor::start_new(200);
+    let mut fps_mon = FpsMonitor::start_new(30);
+    let mut frame_count = 0;
     loop {
-        ui.display_quaternion(imu.quaternion().unwrap());
-        
-        fps_mon.on_frame();
+        let q = imu.quaternion().unwrap();
+        ui.draw_quaternion(q);
         if let Some(fps) = fps_mon.get_fps() {
-            ui.display_fps(fps);
-        }
+            if frame_count % 50 == 0 {
+              ui.draw_fps(fps);
+            }
+        }        
+        ui.flush();
 
+        fps_mon.on_frame();
+        frame_count += 1;
         delay.delay_ms(5u32);
     }
 }
